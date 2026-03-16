@@ -1,5 +1,6 @@
 from validator import validate_post_text
-from scheduler import convert_to_utc
+from ai_rewriter import rewrite_post
+from image_processor import pad_and_upload_image
 from buffer_client import create_post
 from link_generator import extract_post_link
 
@@ -14,14 +15,26 @@ def run_agent():
     # Poster agent image
     image_url = input("Enter poster image URL (or press Enter if none): ")
 
-    try:
-        validated_text = validate_post_text(text)
-    except ValueError as e:
-        print("Validation failed:", e)
-        return
+    print("\n✨ AI is rewriting your post to make it more engaging...\n")
+    rewritten_text = rewrite_post(text)
 
-    print("\nValidated Post:")
+    try:
+        validated_text = validate_post_text(rewritten_text)
+    except ValueError as e:
+        print("Validation failed after AI rewriting:", e)
+        print("Using original text as fallback (if valid).")
+        try:
+            validated_text = validate_post_text(text)
+        except ValueError as orig_e:
+            print("Original text validation also failed:", orig_e)
+            return
+
+    print("---------------------------------")
+    print("Original Draft:")
+    print(text)
+    print("\nAI Enhanced Post:")
     print(validated_text)
+    print("---------------------------------")
 
     confirm = input("\nDo you want to post this on X? (yes/no): ")
 
@@ -29,18 +42,21 @@ def run_agent():
         print("Posting cancelled.")
         return
 
-    user_time = input(
-        "\nEnter schedule time in IST (YYYY-MM-DD HH:MM): "
-    )
+    print("\nPosting to Twitter immediately...\n")
 
-    due_at = convert_to_utc(user_time)
-
-    print("\nScheduling post...\n")
+    final_image_url = None
+    if image_url:
+        print("Processing and padding image to 1200x675 (16:9)...")
+        try:
+            final_image_url = pad_and_upload_image(image_url)
+        except ValueError as e:
+            print("\n" + str(e))
+            print("Posting cancelled due to image failure.")
+            return
 
     response = create_post(
         validated_text,
-        due_at,
-        image_url if image_url else None
+        final_image_url
     )
 
     link = extract_post_link(response)

@@ -1,17 +1,15 @@
-from datetime import datetime
+from datetime import datetime, timedelta
 import pytz
 
 
-def convert_to_utc(user_time_str: str):
+def get_current_utc():
     """
-    user_time_str example: '2026-03-15 18:15'
+    Returns current time + 2 minutes in UTC format required by Buffer API.
+    A small buffer is added because Buffer requires dueAt to be in the future.
     """
-
     ist = pytz.timezone("Asia/Kolkata")
-
-    local_time = datetime.strptime(user_time_str, "%Y-%m-%d %H:%M")
-    local_time = ist.localize(local_time)
-
-    utc_time = local_time.astimezone(pytz.utc)
+    
+    current_time = datetime.now(ist) + timedelta(minutes=2)
+    utc_time = current_time.astimezone(pytz.utc)
 
     return utc_time.strftime("%Y-%m-%dT%H:%M:%S.000Z")

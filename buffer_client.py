@@ -2,7 +2,9 @@ import requests
 from config import API_KEY, CHANNEL_ID, GRAPHQL_URL
 
 
-def create_post(text, due_at, image_url=None):
+import json
+
+def create_post(text, image_url=None):
 
     assets_section = ""
 
@@ -17,20 +19,23 @@ def create_post(text, due_at, image_url=None):
         }}
         """
 
+    # We use json.dumps to safely escape any quotes or newlines in the text
+    escaped_text = json.dumps(text)
+
     query = f"""
     mutation CreatePost {{
       createPost(input: {{
-        text: "{text}",
+        text: {escaped_text},
         channelId: "{CHANNEL_ID}",
         schedulingType: automatic,
-        mode: customScheduled,
-        dueAt: "{due_at}",
+        mode: shareNow,
         {assets_section}
       }}) {{
         ... on PostActionSuccess {{
           post {{
             id
             text
+            externalLink
           }}
         }}
         ... on MutationError {{
