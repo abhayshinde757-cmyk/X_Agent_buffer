@@ -1,5 +1,6 @@
 import time
 import re
+import urllib.parse
 from collections import Counter
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
@@ -8,274 +9,323 @@ from selenium.webdriver.common.by import By
 from webdriver_manager.chrome import ChromeDriverManager
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
+from ai_rewriter import generate_qa_insights
 
 
-def scrape_hashtag_posts(hashtag, max_posts=20):
+# ----------------------------
+# SHARED DRIVER + EXTRACTION
+# ----------------------------
 
+def _create_driver(headless=False):
+    """Creates a Chrome WebDriver instance."""
     chrome_options = Options()
-
-    chrome_options.add_argument("--start-maximized")
     chrome_options.add_argument("--disable-blink-features=AutomationControlled")
     chrome_options.add_argument(r"user-data-dir=D:\selenium_profile")
-
+    if headless:
+        chrome_options.add_argument("--headless=new")
+        chrome_options.add_argument("--disable-gpu")
+        chrome_options.add_argument("--window-size=1920,1080")
+        chrome_options.add_argument("--no-sandbox")
+    else:
+        chrome_options.add_argument("--start-maximized")
+    
     driver = webdriver.Chrome(
         service=Service(ChromeDriverManager().install()),
         options=chrome_options
     )
+    return driver
 
+
+def _login_check(driver, headless=False):
+    """Navigates to X home and checks login status."""
     driver.get("https://x.com/home")
-
     time.sleep(5)
-
     if "login" in driver.current_url:
-        input("Log into your X account in the browser, then press ENTER here...")
+        if headless:
+            raise RuntimeError("Not logged in. Please run the scraper once in non-headless mode to log in first.")
+        else:
+            input("Log into your X account in the browser, then press ENTER here...")
 
-    search_url = f"https://x.com/search?q=%23{hashtag}&src=typed_query&f=live"
 
-    driver.get(search_url)
-
-    WebDriverWait(driver, 15).until(
-        EC.presence_of_element_located((By.CSS_SELECTOR, "article"))
-    )
+def _extract_posts(driver, max_posts=20):
+    """Extracts post data (text, url, analytics) from article elements on the page."""
+    try:
+        WebDriverWait(driver, 20).until(
+            EC.presence_of_element_located((By.CSS_SELECTOR, "article"))
+        )
+    except Exception:
+        return []
 
     posts = []
-
     elements = driver.find_elements(By.CSS_SELECTOR, "article")
 
     for el in elements:
-
         text = el.text
+        if not text or len(text) <= 20:
+            continue
 
-        if text and len(text) > 20:
-            posts.append(text)
+        # Extract URL
+        url = "Unknown"
+        try:
+            time_el = el.find_element(By.XPATH, ".//time/..")
+            href = time_el.get_attribute("href")
+            if href:
+                url = href
+        except Exception:
+            pass
 
+        # Extract Analytics
+        analytics = {"replies": 0, "reposts": 0, "likes": 0, "views": 0}
+        try:
+            group_el = el.find_element(By.CSS_SELECTOR, "div[role='group']")
+            aria_label = group_el.get_attribute("aria-label")
+            if aria_label:
+                for key, pattern in [("replies", r"([\d,]+)\s+repl"), ("reposts", r"([\d,]+)\s+repost"),
+                                     ("likes", r"([\d,]+)\s+like"), ("views", r"([\d,]+)\s+view")]:
+                    match = re.search(pattern, aria_label)
+                    if match:
+                        analytics[key] = int(match.group(1).replace(",", ""))
+        except Exception:
+            pass
+
+        posts.append({"text": text, "url": url, "analytics": analytics})
         if len(posts) >= max_posts:
-                break
-
-    driver.quit()
+            break
 
     return posts
 
 
 # ----------------------------
-# ANALYSIS AGENTS
+# SCRAPING FUNCTIONS
 # ----------------------------
 
-def event_buzz_tracker(posts, hashtag):
-    print("\nEVENT BUZZ SUMMARY")
-    print("Total posts mentioning hashtag:", len(posts))
+def scrape_hashtag_posts(hashtag, max_posts=20, headless=False):
+    driver = _create_driver(headless)
+    try:
+        _login_check(driver, headless)
+        clean = hashtag.strip().lstrip('#')
+        encoded = urllib.parse.quote(clean)
+        driver.get(f"https://x.com/search?q=%23{encoded}&src=typed_query&f=live")
+        return _extract_posts(driver, max_posts)
+    finally:
+        driver.quit()
+
+
+def scrape_account_mentions(username, max_posts=20, headless=False):
+    driver = _create_driver(headless)
+    try:
+        _login_check(driver, headless)
+        clean = username.strip().lstrip('@')
+        encoded = urllib.parse.quote(clean)
+        driver.get(f"https://x.com/search?q=%40{encoded}&src=typed_query&f=live")
+        return _extract_posts(driver, max_posts)
+    finally:
+        driver.quit()
+
+
+# ----------------------------
+# ANALYSIS AGENTS (return data)
+# ----------------------------
+
+def event_buzz_tracker(posts, query):
     unique_users = set()
-
     for p in posts:
-        lines = p.split("\n")
-        if len(lines) > 0:
+        lines = p["text"].split("\n")
+        if lines:
             unique_users.add(lines[0])
-
-    print("Unique contributors:", len(unique_users))
+    return {
+        "title": "Event Buzz Summary",
+        "total_posts": len(posts),
+        "unique_contributors": len(unique_users)
+    }
 
 
 def identify_potential_attendees(posts):
-
-    keywords = [
-        "attending",
-        "looking forward",
-        "excited for",
-        "anyone attending",
-        "joining"
-    ]
-
+    keywords = ["attending", "looking forward", "excited for", "anyone attending", "joining"]
     attendees = []
-
     for p in posts:
-        lower = p.lower()
-        for k in keywords:
-            if k in lower:
-                attendees.append(p)
-                break
-
-    print("\nPOTENTIAL ATTENDEES")
-    for a in attendees:
-        print("-", a[:150])
-
-
-def speaker_reputation_monitor(posts, speaker_name):
-
-    mentions = []
-
-    for p in posts:
-        if speaker_name.lower() in p.lower():
-            mentions.append(p)
-
-    print("\nSPEAKER REPUTATION MENTIONS:", len(mentions))
-
-    for m in mentions[:5]:
-        print("-", m[:150])
+        lower = p["text"].lower()
+        if any(k in lower for k in keywords):
+            attendees.append({"text": p["text"][:150].replace("\n", " "), "url": p["url"]})
+    return {"title": "Potential Attendees", "count": len(attendees), "items": attendees}
 
 
 def topic_trend_analysis(posts):
-
     words = []
-
     for p in posts:
-        tokens = re.findall(r'\b[A-Za-z]{4,}\b', p.lower())
+        tokens = re.findall(r'\b[A-Za-z]{4,}\b', p["text"].lower())
         words.extend(tokens)
-
     counter = Counter(words)
-
-    print("\nTRENDING TOPICS")
-    for word, count in counter.most_common(10):
-        print(word, ":", count)
+    trending = [{"word": w, "count": c} for w, c in counter.most_common(10)]
+    return {"title": "Trending Topics", "items": trending}
 
 
 def best_tweets(posts):
+    ranked = sorted(posts, key=lambda x: len(x["text"]), reverse=True)[:5]
+    items = [{"text": t["text"][:150].replace("\n", " "), "url": t["url"]} for t in ranked]
+    return {"title": "Longest Event Tweets", "items": items}
 
-    ranked = sorted(posts, key=len, reverse=True)
 
-    print("\nTOP EVENT TWEETS")
-    for t in ranked[:5]:
-        print("-", t[:200])
+def top_engaged_tweets(posts):
+    def score(p):
+        a = p["analytics"]
+        return a["likes"] + a["reposts"] + a["replies"]
+    ranked = sorted(posts, key=score, reverse=True)[:5]
+    items = []
+    for t in ranked:
+        a = t["analytics"]
+        items.append({
+            "text": t["text"][:100].replace("\n", " "),
+            "url": t["url"],
+            "likes": a["likes"], "reposts": a["reposts"], "replies": a["replies"]
+        })
+    return {"title": "Top Engaged Tweets", "items": items}
 
 
 def question_mining(posts):
-
-    questions = []
-
-    for p in posts:
-        if "?" in p:
-            questions.append(p)
-
-    print("\nQUESTIONS FROM AUDIENCE")
-
-    for q in questions:
-        print("-", q[:150])
+    questions = [{"text": p["text"][:150].replace("\n", " "), "url": p["url"]}
+                 for p in posts if "?" in p["text"]]
+    return {"title": "Questions From Audience", "count": len(questions), "items": questions}
 
 
 def sentiment_analysis(posts):
-
-    positive_words = ["great", "amazing", "love", "awesome", "excited"]
-    negative_words = ["bad", "boring", "crowded", "disappointing"]
-
-    pos = 0
-    neg = 0
-
+    positive_words = [
+        "great", "amazing", "love", "awesome", "excited", "stellar", "fantastic", "good",
+        "impressed", "wow", "helpful", "learning", "innovation", "future", "cool", "fire",
+        "recommend", "thanks", "thank", "best", "perfect", "win", "success"
+    ]
+    negative_words = [
+        "bad", "boring", "crowded", "disappointing", "awful", "terrible", "slow", "fail",
+        "worst", "hate", "unhappy", "broke", "broken", "issue", "bug", "scam", "trash"
+    ]
+    pos = neg = 0
     for p in posts:
-
-        lower = p.lower()
-
+        lower = p["text"].lower()
         if any(w in lower for w in positive_words):
             pos += 1
-
-        if any(w in lower for w in negative_words):
+        elif any(w in lower for w in negative_words):
             neg += 1
-
-    total = len(posts)
-
-    if total == 0:
-        return
-
-    print("\nSENTIMENT SUMMARY")
-    print("Positive:", round(pos/total*100, 2), "%")
-    print("Negative:", round(neg/total*100, 2), "%")
-    print("Neutral:", round((total-pos-neg)/total*100, 2), "%")
+    total = len(posts) or 1
+    return {
+        "title": "Sentiment Summary",
+        "positive": round(pos / total * 100, 2),
+        "negative": round(neg / total * 100, 2),
+        "neutral": round((total - pos - neg) / total * 100, 2)
+    }
 
 
 def photo_detector(posts):
-
-    photos = []
-
-    for p in posts:
-        if "pic.twitter.com" in p:
-            photos.append(p)
-
-    print("\nPOSTS WITH PHOTOS")
-
-    for p in photos:
-        print("-", p[:150])
+    photos = [{"text": p["text"][:150].replace("\n", " "), "url": p["url"]}
+              for p in posts if "pic.twitter.com" in p["text"]]
+    return {"title": "Posts With Photos", "count": len(photos), "items": photos}
 
 
 def event_feedback(posts):
-
-    feedback_categories = {
+    categories = {
         "content": ["great session", "amazing talk"],
         "venue": ["crowded", "venue", "hall"],
         "speaker": ["speaker", "talk"],
         "networking": ["meet", "network"]
     }
-
-    print("\nEVENT FEEDBACK SUMMARY")
-
-    for category, words in feedback_categories.items():
-
-        matches = []
-
-        for p in posts:
-            for w in words:
-                if w in p.lower():
-                    matches.append(p)
-                    break
-
-        print(category, ":", len(matches))
+    result = {}
+    for cat, words in categories.items():
+        count = sum(1 for p in posts if any(w in p["text"].lower() for w in words))
+        result[cat] = count
+    return {"title": "Event Feedback Summary", "categories": result}
 
 
 def event_advocates(posts):
-
     user_counts = Counter()
-
     for p in posts:
-        lines = p.split("\n")
-        if len(lines) > 0:
-            user = lines[0]
-            user_counts[user] += 1
-
-    print("\nEVENT ADVOCATES")
-
-    for user, count in user_counts.most_common(5):
-        print(user, "tweeted", count, "times")
+        lines = p["text"].split("\n")
+        if lines:
+            user_counts[lines[0]] += 1
+    top = [{"user": u, "count": c} for u, c in user_counts.most_common(5)]
+    return {"title": "Event Advocates", "items": top}
 
 
 def event_impact_report(posts):
-
-    print("\nEVENT IMPACT REPORT")
-
     users = set()
-
     for p in posts:
-        lines = p.split("\n")
-        if len(lines) > 0:
+        lines = p["text"].split("\n")
+        if lines:
             users.add(lines[0])
-
-    print("Total tweets:", len(posts))
-    print("Unique contributors:", len(users))
+    return {
+        "title": "Event Impact Report",
+        "total_tweets": len(posts),
+        "unique_contributors": len(users)
+    }
 
 
 # ----------------------------
-# MAIN EXECUTION
+# API ORCHESTRATOR
 # ----------------------------
+
+def run_scraper_api(query, headless=True):
+    """Called by the FastAPI server. Returns structured JSON with all analytics."""
+    query = query.strip()
+    if query.startswith("@"):
+        posts = scrape_account_mentions(query, 20, headless=headless)
+    else:
+        posts = scrape_hashtag_posts(query, 20, headless=headless)
+
+    # Always initialize analytics structure
+    analytics = {
+        "buzz": {"title": "Event Buzz Summary", "total_posts": 0, "unique_contributors": 0},
+        "attendees": {"title": "Potential Attendees", "count": 0, "items": []},
+        "trending": {"title": "Trending Topics", "items": []},
+        "best_tweets": {"title": "Longest Event Tweets", "items": []},
+        "top_engaged": {"title": "Top Engaged Tweets", "items": []},
+        "questions": {"title": "Questions From Audience", "count": 0, "items": []},
+        "sentiment": {"title": "Sentiment Summary", "positive": 0, "negative": 0, "neutral": 100},
+        "photos": {"title": "Posts With Photos", "count": 0, "items": []},
+        "feedback": {"title": "Event Feedback Summary", "categories": {}},
+        "advocates": {"title": "Event Advocates", "items": []},
+        "impact": {"title": "Event Impact Report", "total_tweets": 0, "unique_contributors": 0},
+    }
+
+    if not posts:
+        return {"posts": [], "analytics": analytics, "ai_insights": "No posts found to analyze."}
+
+    analytics = {
+        "buzz": event_buzz_tracker(posts, query),
+        "attendees": identify_potential_attendees(posts),
+        "trending": topic_trend_analysis(posts),
+        "best_tweets": best_tweets(posts),
+        "top_engaged": top_engaged_tweets(posts),
+        "questions": question_mining(posts),
+        "sentiment": sentiment_analysis(posts),
+        "photos": photo_detector(posts),
+        "feedback": event_feedback(posts),
+        "advocates": event_advocates(posts),
+        "impact": event_impact_report(posts),
+    }
+
+    ai_insights = generate_qa_insights(posts)
+
+    return {"posts": posts, "analytics": analytics, "ai_insights": ai_insights}
+
+
+# ----------------------------
+# CLI ENTRY POINT
+# ----------------------------
+
+def run_scraper():
+    query = input("Enter a Hashtag (#) or Account (@) to search: ").strip()
+    result = run_scraper_api(query, headless=False)
+
+    print(f"\nCOLLECTED POSTS: {len(result['posts'])}")
+
+    for key, data in result["analytics"].items():
+        print(f"\n--- {data.get('title', key)} ---")
+        for k, v in data.items():
+            if k != "title":
+                print(f"  {k}: {v}")
+
+    if result["ai_insights"]:
+        print("\n🧠 AI DEEP ANALYSIS & Q/A")
+        print(result["ai_insights"])
+
 
 if __name__ == "__main__":
-
-    hashtag = input("Enter hashtag to search: ")
-
-    posts = scrape_hashtag_posts(hashtag, 20)
-
-    print("\nCOLLECTED POSTS:", len(posts))
-
-    event_buzz_tracker(posts, hashtag)
-
-    identify_potential_attendees(posts)
-
-    topic_trend_analysis(posts)
-
-    best_tweets(posts)
-
-    question_mining(posts)
-
-    sentiment_analysis(posts)
-
-    photo_detector(posts)
-
-    event_feedback(posts)
-
-    event_advocates(posts)
-
-    event_impact_report(posts)
+    run_scraper()

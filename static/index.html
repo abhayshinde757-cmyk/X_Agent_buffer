@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>X Command Center</title>
+    <meta name="description" content="AI-Powered X (Twitter) Posting and Analytics Command Center">
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+
+    <header class="header">
+        <h1>X Command Center <span>⚡</span></h1>
+        <p>AI-Powered Posting & Deep Analytics for X (Twitter)</p>
+    </header>
+
+    <nav class="tab-nav">
+        <button class="tab-btn active" data-tab="post" id="tab-post-btn">Post to X</button>
+        <button class="tab-btn" data-tab="analytics" id="tab-analytics-btn">Analytics & AI Q/A</button>
+    </nav>
+
+    <div class="container">
+
+        <!-- ======================== TAB 1: POST TO X ======================== -->
+        <div class="tab-content active" id="tab-post">
+
+            <div class="card">
+                <div class="card-title">Draft Your Post</div>
+                <textarea id="post-draft" placeholder="Type your post draft here..."></textarea>
+                <div class="char-count"><span id="draft-count">0</span> / 280</div>
+                <div class="btn-row">
+                    <button class="btn btn-primary" id="btn-rewrite" onclick="rewritePost()">✨ AI Rewrite</button>
+                </div>
+            </div>
+
+            <div class="result-box" id="rewrite-result">
+                <div class="result-label">AI Enhanced Version</div>
+                <div class="result-text" id="rewritten-text"></div>
+                <div class="char-count" id="rewritten-count"></div>
+            </div>
+
+            <div class="card" id="publish-section" style="display:none;">
+                <div class="card-title">Publish Settings</div>
+                <input type="text" id="image-url" placeholder="Paste image URL (optional — Google Drive or direct link)">
+                <div class="btn-row">
+                    <button class="btn btn-primary" id="btn-publish" onclick="publishPost()">🚀 Publish to X</button>
+                    <button class="btn btn-outline" onclick="editDraft()">✏️ Edit Draft</button>
+                </div>
+            </div>
+
+            <div class="spinner" id="post-spinner">Publishing to X...</div>
+
+            <div class="result-box" id="post-result">
+                <div class="result-label">Post Result</div>
+                <div class="result-text" id="post-result-text"></div>
+            </div>
+
+        </div>
+
+        <!-- ======================== TAB 2: ANALYTICS ======================== -->
+        <div class="tab-content" id="tab-analytics">
+
+            <div class="card">
+                <div class="card-title">Search X</div>
+                <input type="text" id="search-query" placeholder="Enter #hashtag or @account to analyze">
+                <div class="btn-row">
+                    <button class="btn btn-primary" id="btn-scrape" onclick="runAnalytics()">🔍 Analyze</button>
+                </div>
+            </div>
+
+            <div class="spinner" id="scrape-spinner">Scraping X and running AI analysis... This may take 20-30 seconds.</div>
+
+            <div id="analytics-results" style="display:none;">
+
+                <!-- Stats Grid -->
+                <div class="analytics-grid" id="stats-grid"></div>
+
+                <!-- Sentiment -->
+                <div class="analytics-section" id="sentiment-section"></div>
+
+                <!-- Trending -->
+                <div class="analytics-section" id="trending-section"></div>
+
+                <!-- Top Engaged -->
+                <div class="analytics-section" id="engaged-section"></div>
+
+                <!-- Questions -->
+                <div class="analytics-section" id="questions-section"></div>
+
+                <!-- Advocates -->
+                <div class="analytics-section" id="advocates-section"></div>
+
+                <!-- AI Insights -->
+                <div class="analytics-section" id="ai-section"></div>
+
+            </div>
+
+            <div class="result-box" id="scrape-error"></div>
+
+        </div>
+
+    </div>
+
+    <script src="/static/script.js"></script>
+</body>
+</html>
