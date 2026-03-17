@@ -5,15 +5,15 @@ from config import NVIDIA_API_KEY
 
 load_dotenv()
 
-def rewrite_post(original_text: str) -> str:
+def rewrite_post(event_data: dict) -> str:
     """
-    Takes the original post draft and uses an LLM to rewrite it into a highly engaging,
+    Takes structured event data and uses an LLM to rewrite it into a highly engaging,
     attractive X (Twitter) post under 280 characters.
     """
     api_key = NVIDIA_API_KEY
     if not api_key or api_key == "add_your_nvidia_api_key_here":
-        print("Warning: NVIDIA_API_KEY in config.py is invalid. Returning original text.")
-        return original_text
+        print("Warning: NVIDIA_API_KEY in config.py is invalid. Returning basic text.")
+        return f"Event: {event_data.get('event title')} @ {event_data.get('location')}"
         
     try:
         client = OpenAI(
@@ -22,32 +22,38 @@ def rewrite_post(original_text: str) -> str:
         )
         
         prompt_text = (
-            "You are an expert social media manager and copywriter. Your task is to rewrite the provided text into an exclusive, highly attractive, and engaging X (Twitter) post.\n\n"
-            "CRITICAL CONSTRAINTS:\n"
-            "1. MUST be strictly UNDER 280 characters. This is non-negotiable.\n"
-            "2. Make it highly interactive (ask a question, run an informal poll, or include a clear call-to-action like 'Reply with your thoughts').\n"
-            "3. Make it sound premium and exciting.\n"
-            "4. Output ONLY the post content. NO conversational filler, NO quotation marks at the start/end, and avoid excessive hashtags."
+            "You are an expert social media manager. Rewrite the provided event details into a high-impact X (Twitter) post.\n\n"
+            "STRICT REQUIREMENTS:\n"
+            "1. MUST be under 280 characters.\n"
+            "2. MUST include these specific fields: Event Name, Speaker, Venue (Location), Description, and Time.\n"
+            "3. Format it cleanly with emojis or bullet points.\n"
+            "4. Make it exciting and professional.\n"
+            "5. Output ONLY the post content."
         )
         
-        # We loop a few times if the LLM hallucinatingly goes over 280
+        event_details = (
+            f"Event Name: {event_data.get('event title')}\n"
+            f"Speaker: {event_data.get('speaker')}\n"
+            f"Venue: {event_data.get('location')}\n"
+            f"Description: {event_data.get('event description')}\n"
+            f"Time: {event_data.get('time')}\n"
+            f"Link: {event_data.get('meetup link')}\n"
+        )
+        
         for _ in range(3):
             response = client.chat.completions.create(
                 model="meta/llama-3.1-405b-instruct",
                 messages=[
                     {"role": "system", "content": prompt_text},
-                    {"role": "user", "content": f"Original draft: {original_text}"}
+                    {"role": "user", "content": f"Event Details:\n{event_details}"}
                 ],
                 temperature=0.7,
-                top_p=1,
-                max_tokens=150,
+                max_tokens=200,
             )
             
             rewritten = response.choices[0].message.content.strip()
-            # Clean possible surrounding quotes just in case
             if rewritten.startswith('"') and rewritten.endswith('"'):
                 rewritten = rewritten[1:-1]
-                
             if len(rewritten) <= 280:
                 return rewritten
                 
@@ -56,7 +62,7 @@ def rewrite_post(original_text: str) -> str:
         return rewritten[:277] + "..."
     except Exception as e:
         print(f"Error during AI rewriting: {e}")
-        return original_text
+        return f"Join us for {event_data.get('event title')}!"
 
 def generate_qa_insights(posts: list) -> str:
     """

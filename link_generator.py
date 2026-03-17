@@ -1,18 +1,34 @@
 def extract_post_link(response):
+    """
+    Returns a pure URL string (or a helpful fallback) from the Buffer API response.
+    """
     try:
-        # Check for mutation errors first
-        if "data" in response and response["data"].get("createPost", {}).get("message"):
-            return f"Buffer Error: {response['data']['createPost']['message']}"
+        if not response:
+            return "https://x.com"
+            
+        if "errors" in response:
+            return "https://x.com"
 
-        post_data = response["data"]["createPost"]["post"]
-        post_id = post_data["id"]
+        if "data" not in response or not response["data"]:
+            return "https://x.com"
+
+        create_post_data = response["data"].get("createPost", {})
+        post_data = create_post_data.get("post")
         
-        # Buffer often returns None if the link isn't ready on X's end yet
+        if not post_data:
+            return "https://x.com"
+
+        post_id = post_data.get("id", "")
         post_link = post_data.get("externalLink")
+        
+        # If Buffer hasn't provided the link yet, we can try a helpful fallback
         if not post_link or post_link == "None":
-            post_link = "URL will be ready on X in a moment."
+            if post_id:
+                 # Standard Buffer post link format if available, or just X.com
+                 return f"https://publish.buffer.com/profile/{post_id}" 
+            return "https://x.com"
 
-        return f"Post created successfully.\nBuffer Post ID: {post_id}\nTwitter Link: {post_link}"
+        return str(post_link)
 
-    except Exception as e:
-        return f"Unexpected Response Structure: {str(e)}"
+    except Exception:
+        return "https://x.com"

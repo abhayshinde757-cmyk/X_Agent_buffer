@@ -6,6 +6,7 @@
     <title>X Command Center</title>
     <meta name="description" content="AI-Powered X (Twitter) Posting and Analytics Command Center">
     <link rel="stylesheet" href="/static/style.css">
+    <script src="/static/script.js?v=2" defer></script>
 </head>
 <body>
 
@@ -17,6 +18,7 @@
     <nav class="tab-nav">
         <button class="tab-btn active" data-tab="post" id="tab-post-btn">Post to X</button>
         <button class="tab-btn" data-tab="analytics" id="tab-analytics-btn">Analytics & AI Q/A</button>
+        <button class="tab-btn" data-tab="excel" id="tab-excel-btn">Excel Master Agent 📊</button>
     </nav>
 
     <div class="container">
@@ -99,8 +101,31 @@
 
         </div>
 
+        <!-- ======================== TAB 3: EXCEL MASTER ======================== -->
+        <div class="tab-content" id="tab-excel">
+
+            <div class="card">
+                <div class="card-title" style="display:flex; justify-content:space-between; align-items:center;">
+                    Excel Master Agent
+                    <span id="live-badge" style="font-size:0.7rem; background:rgba(0, 255, 0, 0.1); color:#00ff00; padding:2px 8px; border-radius:10px; border:1px solid #00ff00;">● LIVE SYNC</span>
+                </div>
+                <p>The agent is autonomously watching <code>posts.xlsx</code>. Set an event to <b>"upcoming"</b> in Excel to trigger auto-drafting.</p>
+                <div id="sync-status" style="font-size:0.8rem; color:var(--text-muted); margin-bottom:1rem;">Waiting for first sync...</div>
+                <div class="btn-row">
+                    <button class="btn btn-outline" id="btn-sync-excel" onclick="syncExcel()">🔄 Sync Now</button>
+                </div>
+            </div>
+
+            <div id="excel-results-container">
+                <!-- Events awaiting review will appear here automatically -->
+                <p style="text-align:center;color:var(--text-muted);margin-top:2rem;">Scanning for events...</p>
+            </div>
+
+            <div class="result-box" id="excel-error" style="display:none;"></div>
+
+        </div>
+
     </div>
 
-    <script src="/static/script.js"></script>
 </body>
 </html>

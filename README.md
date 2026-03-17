@@ -1,128 +1,94 @@
 # ⚡ X Command Center
 
-An AI-powered command center for X (Twitter), enabling premium post creation, automated scheduling, and deep audience analytics. Built with a sleek black-and-white theme using FastAPI and Selenium.
+An AI-powered command center for X (Twitter), enabling premium post creation, demand-based Excel synchronization, and deep audience analytics. Built with a sleek black-and-white theme using FastAPI, Selenium, and NVIDIA Llama 3.1.
 
 ---
 
 ## 🚀 Key Features
 
-### 1. AI-Powered Post Creation
-- **NVIDIA Llama 3.1 Integration**: Automatically rewrites your drafts to be more engaging, interactive, and within the 280-character limit.
-- **Dynamic Image Processing**: Paste any image URL (including Google Drive links). The system automatically pads images to a perfect 16:9 aspect ratio and hosts them for X.
-- **One-Click Publishing**: Instant posting to X via Buffer API.
+### 1. Post to X (AI Drafting)
+- **AI Rewriting**: Automatically rewrites your raw drafts into engaging, high-impact X posts under 280 characters using NVIDIA's Llama 3.1 405B.
+- **Dynamic Image Processor**: Converts any image URL (including Google Drive links) into a perfect 16:9 padded format hosted for X.
+- **Instant Publishing**: Integrated with the Buffer API for seamless one-click posting.
 
-### 2. Deep X Analytics
-- **Headless Scraper**: Runs a Selenium-based scraper in the background (no browser pop-ups) to fetch the latest tweets for any #hashtag or @account.
-- **10+ Analysis Agents**:
-    - **Sentiment Analysis**: Real-time mood tracking of the audience.
-    - **Trending Topics**: Word-cloud style frequency analysis.
-    - **Engagement Metrics**: Rank tweets by likes, reposts, and views.
-    - **Question Mining**: Identify what your audience is asking.
-    - **Event Feedback**: Categorized insights on content, venue, and speakers.
-    - **Advocate Tracking**: Identify your most active contributors.
+### 2. Analytics & AI Q&A
+- **Headless X Scraper**: Periodically fetches the latest tweets for #hashtags or @accounts without browser pop-ups.
+- **Multi-Agent Analysis**:
+    - **Sentiment Tracking**: Gauges audience atmosphere.
+    - **Trending Topics**: Identifies recurring keywords.
+    - **Advocate Detection**: Finds your most active supporters.
+    - **Question Mining**: Extracts audience pain points.
+- **Deep Insights**: Generates a consolidated "Intelligence Report" addressing audience problems with AI-driven solutions.
 
-### 3. AI Q&A & Insights
-- **Key Takeaways**: Automatically summarizes the scraped content into actionable bullet points.
-- **Problem Solving**: Generates an AI-driven Q&A report to address audience queries and pain points discovered during scraping.
+### 3. Excel Master Agent (Live Sync)
+- **Demand-Based Sync**: Click "Sync Now" to fetch the latest event schedule from a remote OneDrive Excel file.
+- **Auto-Drafting**: Automatically drafts X posts and processes images for any row marked as "upcoming".
+- **Verified Mapping**: Seamlessly transitions posts from "Upcoming" to "Review Required" to "Posted" while providing a live, clickable X status link.
 
 ---
 
 ## 🛠️ Setup & Installation
 
 ### 1. Prerequisites
-- Python 3.8+
-- Google Chrome installed (for Selenium)
-- Buffer Account (for posting)
-- NVIDIA API Key (for LLM features)
+- **Python 3.8+**
+- **Google Chrome** installed (for Selenium)
+- **Buffer Account** (API Key and Channel ID)
+- **NVIDIA API Key** (for Llama 3.1 access)
 
 ### 2. Configuration
-Create a `config.py` in the root directory and add your keys:
+The application is configured via `config.py`. Ensure it contains your valid credentials:
 ```python
 API_KEY = "YOUR_BUFFER_API_KEY"
 CHANNEL_ID = "YOUR_BUFFER_CHANNEL_ID"
 GRAPHQL_URL = "https://api.buffer.com/graphql"
 NVIDIA_API_KEY = "YOUR_NVIDIA_API_KEY"
+EXCEL_FILE_PATH = "C:/path/to/posts.xlsx"
+REMOTE_EXCEL_URL = "YOUR_ONEDRIVE_DOWNLOAD_LINK"
 ```
 
 ### 3. Install Dependencies
 ```bash
-pip install fastapi uvicorn selenium webdriver-manager Pillow requests openai python-dotenv python-multipart
+pip install fastapi uvicorn pandas openpyxl httpx Pillow requests openai python-dotenv selenium webdriver-manager
 ```
-
-### 4. Chrome Profile Setup
-The scraper uses a dedicated Chrome profile located at `D:\selenium_profile` (or your preferred path in `scraper.py`).
-- Run `python scraper.py` once to log in to your X account manually. Subsequent runs will be headless and automated.
 
 ---
 
 ## 💻 Running the Application
 
-### Start the Web Dashboard
+### Start the Server
 ```bash
 python server.py
 ```
-After the server starts, open your browser and navigate to:
-**[http://localhost:8000](http://localhost:8000)**
+After the server starts, navigate to the web dashboard:
+👉 **[http://localhost:8000](http://localhost:8000)**
 
-### CLI Mode (Optional)
-If you prefer the command line, you can run:
-```bash
-python app.py
-```
-
----
+### First-Time Scraper Setup
+On the first run of the Analytics tool, you may need to log in to X manually if your session isn't saved.
+1. The scraper uses a dedicated profile directory (configurable in `scraper.py`).
+2. Run the scraper once in windowed mode (set `headless=False` in `scraper.py`) to log in.
 
 ---
 
 ## 🛠️ Troubleshooting
 
-### ERR_ADDRESS_INVALID (0.0.0.0)
-If the browser shows "This site can’t be reached" or `ERR_ADDRESS_INVALID` when visiting `0.0.0.0:8000`, it's because `0.0.0.0` is only for the server configuration.
-- **Fix**: Always use **[http://localhost:8000](http://localhost:8000)** or **[http://127.0.0.1:8000](http://127.0.0.1:8000)** in your browser.
-
 ### Server Port Conflict (Errno 10048)
-If you see an error saying the port is already in use, run the following commands in your terminal (PowerShell) to kill the ghost process:
+If the server fails to start because port 8000 is occupied, use these PowerShell commands:
+1. **Find PID**: `netstat -ano | findstr :8000`
+2. **Kill Process**: `Stop-Process -Id <PID> -Force` (Replace `<PID>` with the result from step 1).
 
-1. **Find the Process ID (PID) on port 8000**:
-   ```powershell
-   netstat -ano | findstr :8000
-   ```
-2. **Kill the process** (Replace `<PID>` with the number from the last column of the output):
-   ```powershell
-   taskkill /F /PID <PID>
-   ```
+### Excel Sync Issues
+Ensure your OneDrive link ends with `?download=1` for direct file access. If the sync button shows an error, check the console logs for specific download or parsing failures.
 
 ---
 
 ## 🎨 Tech Stack
 - **Backend**: FastAPI (Python)
-- **Frontend**: Vanilla HTML5, CSS3 (Black & White Theme), JavaScript (ES6)
-- **AI/LLM**: NVIDIA API (Meta Llama 3.1)
+- **Frontend**: Vanilla HTML5, CSS3, JavaScript (ES6)
+- **AI**: NVIDIA API (Meta Llama 3.1 405B)
 - **Automation**: Selenium WebDriver, Buffer GraphQL API
-- **Image Processing**: Pillow (PIL)
-
----
-
----
-
-## 🛠️ Git Collaboration
-
-To sync this project with the parent repository, follow these steps:
-
-### 1. Pushing Changes to Parent Repo
-Once you've made changes and committed them locally, use this command to push to the main branch:
-```bash
-git push origin main
-```
-
-### 2. Fetching & Pulling Latest Data
-To get the latest updates from the parent repository and merge them into your local workspace:
-```bash
-git fetch origin
-git pull origin main
-```
+- **Data**: Pandas, OpenPyXL
 
 ---
 
 ## 📄 License
-MIT License. Created for the "Advanced Agentic Coding" project.
+MIT License. Created for the Advanced Agentic Coding project.

@@ -360,7 +360,125 @@ textarea:focus, input[type="text"]:focus {
 }
 .ai-insights strong { color: var(--accent); }
 
+/* Excel Master Agent Styles */
+.excel-card {
+    border-left: 4px solid var(--accent);
+    margin-bottom: 2rem;
+    padding: 2rem;
+}
+
+.excel-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    margin-bottom: 1.5rem;
+}
+
+.excel-title {
+    font-size: 1.4rem;
+    font-weight: 800;
+    margin-bottom: 0.3rem;
+    letter-spacing: -0.5px;
+}
+
+.excel-meta {
+    font-size: 0.85rem;
+    color: var(--text-muted);
+}
+
+.status-badge {
+    background: rgba(255, 215, 0, 0.1);
+    border: 1px solid #ffd700;
+    color: #ffd700 !important;
+    padding: 0.2rem 0.8rem;
+    border-radius: 20px;
+    font-size: 0.7rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.excel-widgets {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1.5rem;
+    margin-top: 1.5rem;
+}
+
+.excel-widget {
+    background: rgba(255, 255, 255, 0.02);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 1.2rem;
+    display: flex;
+    flex-direction: column;
+}
+
+.widget-label {
+    font-size: 0.7rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    color: var(--text-muted);
+    margin-bottom: 0.8rem;
+}
+
+.excel-textarea {
+    width: 100%;
+    min-height: 120px;
+    background: var(--bg-primary);
+    border: 1px solid var(--border);
+    color: var(--text-primary);
+    padding: 0.8rem;
+    border-radius: 6px;
+    font-family: inherit;
+    font-size: 0.9rem;
+    line-height: 1.5;
+    resize: none;
+    outline: none;
+    transition: var(--transition);
+}
+
+.excel-textarea:focus {
+    border-color: #555;
+    background: rgba(255,255,255,0.03);
+}
+
+.image-link-box {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+    justify-content: center;
+    flex-grow: 1;
+}
+
+.excel-input-readonly {
+    background: rgba(0,0,0,0.2);
+    border: 1px dashed var(--border);
+    color: var(--text-secondary);
+    font-size: 0.8rem;
+    padding: 0.6rem;
+    border-radius: 4px;
+    cursor: default;
+}
+
+.widget-link {
+    font-size: 0.85rem;
+    color: var(--success);
+    text-decoration: none;
+    font-weight: 500;
+    align-self: flex-start;
+}
+
+.widget-link:hover {
+    text-decoration: underline;
+}
+
 /* RESPONSIVE */
+@media (max-width: 800px) {
+    .excel-widgets { grid-template-columns: 1fr; }
+}
+
 @media (max-width: 600px) {
     .header h1 { font-size: 1.5rem; }
     .tab-btn { padding: 0.8rem 1.2rem; font-size: 0.8rem; }

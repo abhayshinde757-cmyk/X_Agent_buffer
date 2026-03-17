@@ -9,7 +9,7 @@ def create_post(text, image_url=None):
     assets_section = ""
 
     if image_url:
-        assets_section = f"""
+        assets_section = f""",
         assets: {{
             images: [
                 {{
@@ -28,7 +28,7 @@ def create_post(text, image_url=None):
         text: {escaped_text},
         channelId: "{CHANNEL_ID}",
         schedulingType: automatic,
-        mode: shareNow,
+        mode: shareNow
         {assets_section}
       }}) {{
         ... on PostActionSuccess {{
@@ -55,5 +55,6 @@ def create_post(text, image_url=None):
         json={"query": query},
         headers=headers
     )
+    response.raise_for_status()
 
     return response.json()

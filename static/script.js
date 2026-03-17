@@ -1,30 +1,33 @@
-// ===========================
-// TAB NAVIGATION
-// ===========================
-document.querySelectorAll('.tab-btn').forEach(btn => {
-    btn.addEventListener('click', () => {
-        document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
-        document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
-        btn.classList.add('active');
-        document.getElementById('tab-' + btn.dataset.tab).classList.add('active');
-    });
-});
+// ==========================================
+// 🚀 X COMMAND CENTER - CORE LOGIC
+// ==========================================
 
-// Character counter
-const draftEl = document.getElementById('post-draft');
-draftEl.addEventListener('input', () => {
-    document.getElementById('draft-count').textContent = draftEl.value.length;
-});
+console.log("🚀 X Command Center script loaded!");
+
+// --- 1. GLOBALLY EXPOSED FUNCTIONS (Fixed for Brave/Chrome) ---
+window.syncExcel = syncExcel;
+window.confirmExcelPost = confirmExcelPost;
+window.rewritePost = rewritePost;
+window.publishPost = publishPost;
+window.runAnalytics = runAnalytics;
+window.editDraft = editDraft;
 
 // State
 let currentRewrittenText = '';
 
+// Helper
+function escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text || '';
+    return div.innerHTML;
+}
 
 // ===========================
 // FEATURE 1: POST TO X
 // ===========================
 
 async function rewritePost() {
+    const draftEl = document.getElementById('post-draft');
     const text = draftEl.value.trim();
     if (!text) return alert('Please enter a draft first.');
 
@@ -35,7 +38,10 @@ async function rewritePost() {
     try {
         const res = await fetch('/api/rewrite', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: { 
+                'Content-Type': 'application/json',
+                'Cache-Control': 'no-cache'
+            },
             body: JSON.stringify({ text })
         });
         const data = await res.json();
@@ -62,14 +68,12 @@ async function rewritePost() {
     }
 }
 
-
 function editDraft() {
     document.getElementById('publish-section').style.display = 'none';
     document.getElementById('rewrite-result').className = 'result-box';
     document.getElementById('post-result').className = 'result-box';
-    draftEl.focus();
+    document.getElementById('post-draft').focus();
 }
-
 
 async function publishPost() {
     if (!currentRewrittenText) return alert('Please rewrite your draft first.');
@@ -90,7 +94,10 @@ async function publishPost() {
 
         const res = await fetch('/api/post', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: { 
+                'Content-Type': 'application/json',
+                'Cache-Control': 'no-cache'
+            },
             body: JSON.stringify(body)
         });
         const data = await res.json();
@@ -115,7 +122,6 @@ async function publishPost() {
     }
 }
 
-
 // ===========================
 // FEATURE 2 & 3: ANALYTICS + AI Q/A
 // ===========================
@@ -137,7 +143,10 @@ async function runAnalytics() {
     try {
         const res = await fetch('/api/scrape', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: { 
+                'Content-Type': 'application/json',
+                'Cache-Control': 'no-cache'
+            },
             body: JSON.stringify({ query })
         });
         const data = await res.json();
@@ -159,15 +168,9 @@ async function runAnalytics() {
     }
 }
 
-
 function renderAnalytics(data) {
     if (!data || !data.analytics) return;
     const a = data.analytics;
-
-    // Safety check for all fields
-    const safeGet = (obj, path, def = {}) => {
-        return path.split('.').reduce((acc, part) => acc && acc[part], obj) || def;
-    };
 
     // Stats Grid
     const statsGrid = document.getElementById('stats-grid');
@@ -279,9 +282,155 @@ function renderAnalytics(data) {
     `;
 }
 
+// ===========================
+// FEATURE 4: EXCEL MASTER AGENT (Triggered Sync)
+// ===========================
 
-function escapeHtml(text) {
-    const div = document.createElement('div');
-    div.textContent = text;
-    return div.innerHTML;
+async function syncExcel() {
+    const btn = document.getElementById('btn-sync-excel');
+    const container = document.getElementById('excel-results-container');
+    const errorBox = document.getElementById('excel-error');
+    const syncStatus = document.getElementById('sync-status');
+
+    btn.disabled = true;
+    btn.textContent = '⏳ Syncing Remote Excel...';
+    container.style.opacity = '0.5';
+
+    try {
+        const res = await fetch('/api/excel/sync', {
+            headers: { 'Cache-Control': 'no-cache' }
+        });
+        const data = await res.json();
+
+        if (data.success) {
+            errorBox.style.display = 'none';
+            if (data.events.length === 0) {
+                container.innerHTML = '<p style="text-align:center;color:var(--text-muted);margin-top:2rem;">No events waiting for review.</p>';
+                if (syncStatus) syncStatus.textContent = 'Last checked: ' + new Date().toLocaleTimeString() + ' (No new events)';
+            } else {
+                renderExcelDrafts(data.events);
+                if (syncStatus) syncStatus.textContent = 'Last sync: ' + new Date().toLocaleTimeString() + ` (${data.events.length} pending review)`;
+            }
+        } else {
+            console.error('Sync Error:', data.error);
+            alert('Sync failed: ' + data.error);
+        }
+    } catch (e) {
+        console.error('Sync Network Error:', e.message);
+        alert('Network error during sync.');
+    } finally {
+        btn.disabled = false;
+        btn.textContent = '🔄 Sync Now';
+        container.style.opacity = '1';
+    }
 }
+
+function renderExcelDrafts(events) {
+    const container = document.getElementById('excel-results-container');
+    let html = '<div class="section-title">Events Awaiting Review</div>';
+
+    events.forEach(ev => {
+        html += `
+            <div class="card excel-card" id="excel-card-${ev.index}">
+                <div class="excel-header">
+                    <div>
+                        <div class="excel-title">${escapeHtml(ev['event title'])}</div>
+                        <div class="excel-meta">${escapeHtml(ev.location)} | ${escapeHtml(ev.time)}</div>
+                    </div>
+                    <div class="status-badge">READY FOR REVIEW</div>
+                </div>
+
+                <div class="excel-widgets">
+                    <div class="excel-widget ai-post-widget">
+                        <div class="widget-label">✨ AI Elaborated Post</div>
+                        <textarea id="excel-draft-${ev.index}" class="excel-textarea">${ev.ai_draft}</textarea>
+                    </div>
+
+                    <div class="excel-widget image-link-widget">
+                        <div class="widget-label">🖼️ Poster Image Link</div>
+                        <div class="image-link-box">
+                            <input type="text" readonly value="${ev.posterlink || 'No image linked'}" class="excel-input-readonly">
+                            ${ev.posterlink ? `<a href="${ev.posterlink}" target="_blank" class="widget-link">View Original →</a>` : ''}
+                        </div>
+                    </div>
+                </div>
+
+                <div class="btn-row">
+                    <button class="btn btn-primary" onclick="confirmExcelPost(${ev.index}, '${ev.posterlink || ''}')">🚀 Finalize & Publish</button>
+                </div>
+            </div>
+        `;
+    });
+    
+    container.innerHTML = html;
+}
+
+async function confirmExcelPost(index, imageUrl) {
+    const text = document.getElementById(`excel-draft-${index}`).value.trim();
+    if (!text) return alert('Post text cannot be empty.');
+
+    if (!confirm("Confirm posting this event to X?")) return;
+
+    const card = document.getElementById(`excel-card-${index}`);
+    const btn = card.querySelector('button');
+    btn.disabled = true;
+    btn.textContent = '⏳ Publishing...';
+
+    try {
+        const res = await fetch('/api/excel/confirm', {
+            method: 'POST',
+            headers: { 
+                'Content-Type': 'application/json',
+                'Cache-Control': 'no-cache'
+            },
+            body: JSON.stringify({ index, text, image_url: imageUrl })
+        });
+        const data = await res.json();
+
+        if (data.success) {
+            card.innerHTML = `
+                <div class="excel-header">
+                    <div class="excel-title">✅ Successfully Posted</div>
+                </div>
+                <div class="result-text success" style="margin-top:1rem;">
+                    X Post URL: <a href="${data.link}" target="_blank" class="result-link">${data.link}</a>
+                </div>
+            `;
+            setTimeout(() => {
+                card.remove();
+                if (document.querySelectorAll('.excel-card').length === 0) {
+                     document.getElementById('excel-results-container').innerHTML = '<p style="text-align:center;color:var(--text-muted);margin-top:2rem;">All events published!</p>';
+                }
+            }, 3000);
+        } else {
+            alert('Error: ' + data.error);
+            btn.disabled = false;
+            btn.textContent = '🚀 Finalize & Publish';
+        }
+    } catch (e) {
+        alert('Network error: ' + e.message);
+        btn.disabled = false;
+        btn.textContent = '🚀 Finalize & Publish';
+    }
+}
+
+// --- DOM EVENT LISTENERS (Initialize UI) ---
+document.addEventListener('DOMContentLoaded', () => {
+    // Tab Navigation
+    document.querySelectorAll('.tab-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+            document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+            btn.classList.add('active');
+            document.getElementById('tab-' + btn.dataset.tab).classList.add('active');
+        });
+    });
+
+    // Character counter
+    const draftInput = document.getElementById('post-draft');
+    if (draftInput) {
+        draftInput.addEventListener('input', () => {
+            document.getElementById('draft-count').textContent = draftInput.value.length;
+        });
+    }
+});
