@@ -20,7 +20,7 @@ from link_generator import extract_post_link
 from scraper import run_scraper_api
 
 async def perform_excel_sync():
-    """Triggered sync: Polls Remote Excel, merges with local status, drafts 'upcoming', and updates local cache."""
+    """Strict dynamic sync: Fetches Remote Excel, filters ONLY 'upcoming', processes them, and overwrites local cache."""
     async with httpx.AsyncClient() as client:
         try:
             # 1. Download from OneDrive
@@ -29,99 +29,66 @@ async def perform_excel_sync():
             if resp.status_code == 200:
                 # Load Remote Data
                 from io import BytesIO
-                remote_df = pd.read_excel(BytesIO(resp.content), engine='openpyxl')
+                df = pd.read_excel(BytesIO(resp.content), engine='openpyxl')
                 
-                # Ensure essential columns exist in remote_df and are string type
-                for col in ['status', 'link', 'processed_image', 'event title', 'time']:
-                    if col not in remote_df.columns:
-                        remote_df[col] = ""
-                    remote_df[col] = remote_df[col].astype(str).replace('nan', '')
-
-                # Load Local Data if exists
-                if os.path.exists(EXCEL_FILE_PATH):
-                    local_df = await asyncio.to_thread(pd.read_excel, EXCEL_FILE_PATH, engine='openpyxl')
-                    
-                    # Ensure essential columns exist in local_df and are string type
-                    for col in ['status', 'link', 'processed_image', 'event title', 'time']:
-                        if col not in local_df.columns:
-                            local_df[col] = ""
-                        local_df[col] = local_df[col].astype(str).replace('nan', '')
-
-                    # Merge Logic: We want to keep remote events but PRESERVE local status/links for existing ones
-                    if not remote_df.empty and not local_df.empty:
-                        merged_df = remote_df.copy()
-                        for idx, row in merged_df.iterrows():
-                            # Look for this event in local (both as strings)
-                            match = local_df[
-                                (local_df['event title'] == row['event title']) & 
-                                (local_df['time'] == row['time'])
-                            ]
-                            if not match.empty:
-                                local_row = match.iloc[0]
-                                # If remote is NOT 'upcoming', we preserve local status (Review Required/Posted)
-                                # If remote IS 'upcoming', we ignore local and let it be re-processed
-                                if row['status'].lower() != 'upcoming':
-                                    if local_row['status'] in ['Review Required', 'Posted']:
-                                        merged_df.at[idx, 'status'] = local_row['status']
-                                        merged_df.at[idx, 'link'] = local_row['link']
-                                        merged_df.at[idx, 'processed_image'] = local_row.get('processed_image', '')
-                        df = merged_df
-                    else:
-                        df = remote_df
-                else:
-                    df = remote_df
-                
-                # Normalize and ensure columns
-                for col in ['status', 'link', 'ai_draft', 'processed_image']:
+                # Normalize columns safely
+                for col in ['status', 'event title', 'time', 'posterlink', 'event description', 'location', 'speaker', 'meetup link', 'ai_draft', 'processed_image', 'link']:
                     if col not in df.columns:
                         df[col] = ""
                     df[col] = df[col].astype(str).replace('nan', '').replace('None', '')
 
-                # Identify "upcoming" rows
+                # STRICT FILTER: ONLY keep 'upcoming'
                 upcoming_mask = df['status'].str.lower().str.strip() == 'upcoming'
-                upcoming_events = df[upcoming_mask]
+                upcoming_events = df[upcoming_mask].copy()
                 
-                if not upcoming_events.empty:
-                    print(f"INFO: Found {len(upcoming_events)} new upcoming events. Auto-processing...")
-                    for index, row in upcoming_events.iterrows():
-                        try:
-                            # 1. AI Drafting
-                            event_data = {
-                                "event title": str(row.get("event title", "")),
-                                "event description": str(row.get("event description", "")),
-                                "location": str(row.get("location", "")),
-                                "time": str(row.get("time", "")),
-                                "speaker": str(row.get("speaker", "")),
-                                "meetup link": str(row.get("meetup link", ""))
-                            }
-                            draft = await asyncio.to_thread(rewrite_post, event_data)
-                            
-                            # 2. Image Processing
-                            orig_image = str(row.get("posterlink", "")).strip()
-                            processed_url = ""
-                            if orig_image and orig_image.lower() not in ['nan', 'none', '']:
-                                try:
-                                    processed_url = await asyncio.to_thread(pad_and_upload_image, orig_image)
-                                except Exception as img_err:
-                                    print(f"WARNING: Image processing failed: {img_err}")
+                if upcoming_events.empty:
+                    print(f"INFO: No upcoming events found. Data fetching skipped.")
+                    # Still save an empty/clean set to local cache to clear old data
+                    await asyncio.to_thread(upcoming_events.to_excel, EXCEL_FILE_PATH, index=False, engine='openpyxl')
+                    return True, ""
 
-                            # 3. Update row
-                            df.at[index, 'status'] = 'Review Required'
-                            df.at[index, 'ai_draft'] = draft 
-                            df.at[index, 'link'] = "" # Clear stale Buffer output
-                            df.at[index, 'processed_image'] = processed_url
-                            
-                            print(f"SUCCESS: Auto-processed draft for: {event_data['event title']}")
-                        except Exception as row_err:
-                            print(f"ERROR: Failed processing row {index}: {str(row_err)}")
+                print(f"INFO: Processing {len(upcoming_events)} strictly upcoming events dynamically...")
+                
+                for index, row in upcoming_events.iterrows():
+                    try:
+                        # 1. AI Drafting
+                        event_data = {
+                            "event title": str(row.get("event title", "")),
+                            "event description": str(row.get("event description", "")),
+                            "location": str(row.get("location", "")),
+                            "time": str(row.get("time", "")),
+                            "speaker": str(row.get("speaker", "")),
+                            "meetup link": str(row.get("meetup link", ""))
+                        }
+                        
+                        draft = await asyncio.to_thread(rewrite_post, event_data)
+                        
+                        # 2. Image Processing
+                        orig_image = str(row.get("posterlink", "")).strip()
+                        processed_url = ""
+                        if orig_image and orig_image.lower() not in ['', 'nan', 'none']:
+                            try:
+                                processed_url = await asyncio.to_thread(pad_and_upload_image, orig_image)
+                            except Exception as img_err:
+                                print(f"WARNING: Image processing failed: {img_err}")
 
-                # Save back to local Excel
-                await asyncio.to_thread(df.to_excel, EXCEL_FILE_PATH, index=False, engine='openpyxl')
+                        # 3. Update row dynamically
+                        upcoming_events.at[index, 'status'] = 'Review Required'
+                        upcoming_events.at[index, 'ai_draft'] = draft 
+                        upcoming_events.at[index, 'link'] = "" 
+                        upcoming_events.at[index, 'processed_image'] = processed_url
+                        
+                        print(f"SUCCESS: Auto-processed dynamic draft: {event_data['event title']}")
+                    except Exception as row_err:
+                        print(f"ERROR: Processing row: {str(row_err)}")
+
+                # Save ONLY the processed "upcoming" rows to local Excel as our active queue
+                await asyncio.to_thread(upcoming_events.to_excel, EXCEL_FILE_PATH, index=False, engine='openpyxl')
                 return True, ""
             else:
-                return False, f"Remote Excel download failed: {resp.status_code}"
+                return False, f"Remote download failed: {resp.status_code}"
         except Exception as e:
-            msg = f"Sync logic failure: {str(e)}"
+            msg = f"Excel Sync Error: {str(e)}"
             print(f"ERROR: {msg}")
             return False, msg
 

@@ -1,94 +1,89 @@
-# ⚡ X Command Center
+# ⚡ X Command Center: Complete Technical Documentation
 
-An AI-powered command center for X (Twitter), enabling premium post creation, demand-based Excel synchronization, and deep audience analytics. Built with a sleek black-and-white theme using FastAPI, Selenium, and NVIDIA Llama 3.1.
-
----
-
-## 🚀 Key Features
-
-### 1. Post to X (AI Drafting)
-- **AI Rewriting**: Automatically rewrites your raw drafts into engaging, high-impact X posts under 280 characters using NVIDIA's Llama 3.1 405B.
-- **Dynamic Image Processor**: Converts any image URL (including Google Drive links) into a perfect 16:9 padded format hosted for X.
-- **Instant Publishing**: Integrated with the Buffer API for seamless one-click posting.
-
-### 2. Analytics & AI Q&A
-- **Headless X Scraper**: Periodically fetches the latest tweets for #hashtags or @accounts without browser pop-ups.
-- **Multi-Agent Analysis**:
-    - **Sentiment Tracking**: Gauges audience atmosphere.
-    - **Trending Topics**: Identifies recurring keywords.
-    - **Advocate Detection**: Finds your most active supporters.
-    - **Question Mining**: Extracts audience pain points.
-- **Deep Insights**: Generates a consolidated "Intelligence Report" addressing audience problems with AI-driven solutions.
-
-### 3. Excel Master Agent (Live Sync)
-- **Demand-Based Sync**: Click "Sync Now" to fetch the latest event schedule from a remote OneDrive Excel file.
-- **Auto-Drafting**: Automatically drafts X posts and processes images for any row marked as "upcoming".
-- **Verified Mapping**: Seamlessly transitions posts from "Upcoming" to "Review Required" to "Posted" while providing a live, clickable X status link.
+An enterprise-grade, AI-driven dashboard for X (Twitter) management. This application integrates real-time OneDrive synchronization, automated LLM content drafting, visual asset optimization, and deep-dive audience analytics.
 
 ---
 
-## 🛠️ Setup & Installation
+## 🏗️ System Architecture & File Analysis
 
-### 1. Prerequisites
-- **Python 3.8+**
-- **Google Chrome** installed (for Selenium)
-- **Buffer Account** (API Key and Channel ID)
-- **NVIDIA API Key** (for Llama 3.1 access)
+### 1. Core Server (`server.py`)
+The **FastAPI** backbone of the application. It orchestrates all module interactions and exposes the following REST API:
+- **`GET /`**: Serves the primary web dashboard.
+- **`POST /api/rewrite`**: Accesses the AI suite to transform raw text into optimized X posts.
+- **`POST /api/post`**: A standalone tool to post text and images directly to X via Buffer.
+- **`POST /api/scrape`**: Triggers the Selenium scraper and the 10+ analysis agents to generate a 360° audience report.
+- **`GET /api/excel/sync`**: The entry point for the **Excel Master Agent**. It pulls data from OneDrive and initializes auto-drafting.
+- **`POST /api/excel/confirm`**: Finalizes a drafted event and pushes it live to X.
 
-### 2. Configuration
-The application is configured via `config.py`. Ensure it contains your valid credentials:
-```python
-API_KEY = "YOUR_BUFFER_API_KEY"
-CHANNEL_ID = "YOUR_BUFFER_CHANNEL_ID"
-GRAPHQL_URL = "https://api.buffer.com/graphql"
-NVIDIA_API_KEY = "YOUR_NVIDIA_API_KEY"
-EXCEL_FILE_PATH = "C:/path/to/posts.xlsx"
-REMOTE_EXCEL_URL = "YOUR_ONEDRIVE_DOWNLOAD_LINK"
-```
+### 2. The AI Engine (`ai_rewriter.py` & `validator.py`)
+Powered by **NVIDIA's Meta Llama 3.1 405B Instruct** model.
+- **Drafting**: Uses a sophisticated system prompt to convert structured event data (Time, Venue, Speaker) into high-impact, emoji-rich posts under 280 characters.
+- **Intelligence Reports**: Analyzes batches of scraped tweets to cluster topics, detect global sentiment, and generate a **Strategic Q&A** to solve audience pain points.
+- **Validation**: Ensures every post strictly adheres to X's technical constraints.
 
-### 3. Install Dependencies
+### 3. Media Optimization (`image_processor.py`)
+A specialized module using **Pillow (PIL)** to ensure visual quality.
+- **GDrive Resolution**: Automatically converts viewable Google Drive links into direct binary download streams.
+- **Contextual Padding**: Intelligently resizes images to fit a **16:9 (1200x675)** canvas, adding cinematic black bars to preserve the original aspect ratio without stretching.
+- **Public Hosting**: Uploads the processed image to a public CDN (`uguu.se`), providing a stateless URL that the Buffer API can ingest for posting.
+
+### 4. Audience Intelligence (`scraper.py`)
+A robust **Selenium** automation layer.
+- **Analysis Agents**: Features 10+ specialized logic hunters:
+    - *Buzz Tracker*: Monitors volume and unique contributor growth.
+    - *Sentiment Summary*: Real-time positive/negative/neutral ratio.
+    - *Engagement Ranker*: Sorts tweets by Like/Retweet/Reply metrics.
+    - *Advocate Tracker*: Identifies top community contributors.
+    - *Problem Miner*: Uses regex to find audience questions and complaints.
+- **Headless Mode**: Runs silently in the background using a dedicated Chrome profile.
+
+### 5. Publishing Utility (`buffer_client.py` & `link_generator.py`)
+- **Buffer Integration**: Communicates with the Buffer GraphQL API to queue and "Share Now" posts to X.
+- **URL Extraction**: Parses complex GraphQL responses to retrieve the final X.com status link. If the link is still pending, it provides a smart fallback to the Buffer profile dashboard.
+
+---
+
+## 🔄 The "Excel Master Agent" Workflow (End-to-End)
+
+The Excel Master Agent represents the most advanced workflow in the codebase, moving from third-party data to a live social post in seconds.
+
+1.  **Trigger**: The user clicks "Sync Now" on the dashboard.
+2.  **Ingestion**: `server.py` performs an `httpx` request to the **OneDrive Direct Link**.
+3.  **Merge Logic**: The system loads the local `posts.xlsx` cache. It compares remote and local data using the `Event Title + Time` as a composite key. This ensures we **preserve the status** of previously drafted or posted events while still receiving new updates.
+4.  **Dynamic Drafting**: Any row with a status of `"upcoming"` is immediately processed:
+    - The LLM crafts a post.
+    - The image is downloaded, padded, and re-hosted.
+5.  **Review State**: The row is updated to `"Review Required"` in the local cache, making it visible as a card on the dashboard.
+6.  **Confirmation**: When the user clicks "Finalize & Publish", the buffered data is pushed to X. The local state is updated to `"Posted"` and the final **Live Link** is saved to the Excel file.
+
+---
+
+## 🛠️ Configuration & Environment
+
+### `config.py`
+This file acts as the secure vault for your environment.
+- **`EXCEL_FILE_PATH`**: Absolute path to the local cache (`posts.xlsx`).
+- **`REMOTE_EXCEL_URL`**: The direct download URL for your OneDrive source.
+- **`NVIDIA_API_KEY`**: Required for all Llama 3.1 features.
+- **`API_KEY` & `CHANNEL_ID`**: Your Buffer credentials for X integration.
+
+---
+
+## 💻 Technical Setup
+
+### Installation
 ```bash
 pip install fastapi uvicorn pandas openpyxl httpx Pillow requests openai python-dotenv selenium webdriver-manager
 ```
 
----
-
-## 💻 Running the Application
-
-### Start the Server
+### Execution
 ```bash
+# Start the Integrated Command Center
 python server.py
 ```
-After the server starts, navigate to the web dashboard:
-👉 **[http://localhost:8000](http://localhost:8000)**
-
-### First-Time Scraper Setup
-On the first run of the Analytics tool, you may need to log in to X manually if your session isn't saved.
-1. The scraper uses a dedicated profile directory (configurable in `scraper.py`).
-2. Run the scraper once in windowed mode (set `headless=False` in `scraper.py`) to log in.
+Visit: **[http://localhost:8000](http://localhost:8000)**
 
 ---
 
-## 🛠️ Troubleshooting
-
-### Server Port Conflict (Errno 10048)
-If the server fails to start because port 8000 is occupied, use these PowerShell commands:
-1. **Find PID**: `netstat -ano | findstr :8000`
-2. **Kill Process**: `Stop-Process -Id <PID> -Force` (Replace `<PID>` with the result from step 1).
-
-### Excel Sync Issues
-Ensure your OneDrive link ends with `?download=1` for direct file access. If the sync button shows an error, check the console logs for specific download or parsing failures.
-
----
-
-## 🎨 Tech Stack
-- **Backend**: FastAPI (Python)
-- **Frontend**: Vanilla HTML5, CSS3, JavaScript (ES6)
-- **AI**: NVIDIA API (Meta Llama 3.1 405B)
-- **Automation**: Selenium WebDriver, Buffer GraphQL API
-- **Data**: Pandas, OpenPyXL
-
----
-
-## 📄 License
-MIT License. Created for the Advanced Agentic Coding project.
+## 📄 License & Credits
+MIT License | Developed for the **Advanced Agentic Coding** initiative at Google Deepmind.
