@@ -1,19 +1,69 @@
 import os
 from dotenv import load_dotenv
-from openai import OpenAI
+from openai import OpenAI, APIStatusError
 from config import NVIDIA_API_KEY
 
 load_dotenv()
 
-def rewrite_post(event_data: dict) -> str:
+CORE_FIELD_LABELS = {
+    "event title": "Event Name",
+    "speaker": "Speaker",
+    "location": "Venue",
+    "event description": "Description",
+    "time": "Time",
+    "meetup link": "Link",
+}
+
+
+def _normalize_event_data(event_data) -> dict:
+    """Support both structured row input and raw draft text."""
+    if isinstance(event_data, dict):
+        normalized = {}
+        for key, value in event_data.items():
+            text = str(value).strip()
+            if text.lower() in {"", "nan", "none"}:
+                continue
+            normalized[str(key)] = text
+        return normalized
+
+    text = str(event_data).strip()
+    return {"draft text": text} if text else {}
+
+
+def _build_event_details(event_data: dict) -> str:
+    lines = []
+    seen = set()
+
+    for key, label in CORE_FIELD_LABELS.items():
+        value = event_data.get(key)
+        if value:
+            lines.append(f"{label}: {value}")
+            seen.add(key)
+
+    for key, value in event_data.items():
+        if key in seen:
+            continue
+        label = str(key).replace("_", " ").strip().title()
+        lines.append(f"{label}: {value}")
+
+    return "\n".join(lines)
+
+
+def rewrite_post(event_data) -> str:
     """
     Takes structured event data and uses an LLM to rewrite it into a highly engaging,
     attractive X (Twitter) post under 280 characters.
     """
+    normalized_data = _normalize_event_data(event_data)
+    if not normalized_data:
+        raise ValueError("No event details provided for rewriting.")
+
     api_key = NVIDIA_API_KEY
     if not api_key or api_key == "add_your_nvidia_api_key_here":
         print("Warning: NVIDIA_API_KEY in config.py is invalid. Returning basic text.")
-        return f"Event: {event_data.get('event title')} @ {event_data.get('location')}"
+        title = normalized_data.get("event title") or normalized_data.get("draft text") or "Untitled event"
+        location = normalized_data.get("location")
+        return f"Event: {title}" + (f" @ {location}" if location else "")
         
     try:
         client = OpenAI(
@@ -25,20 +75,13 @@ def rewrite_post(event_data: dict) -> str:
             "You are an expert social media manager. Rewrite the provided event details into a high-impact X (Twitter) post.\n\n"
             "STRICT REQUIREMENTS:\n"
             "1. MUST be under 280 characters.\n"
-            "2. MUST include these specific fields: Event Name, Speaker, Venue (Location), Description, and Time.\n"
+            "2. Use the most important event details provided below and incorporate any extra columns only when they add useful context.\n"
             "3. Format it cleanly with emojis or bullet points.\n"
             "4. Make it exciting and professional.\n"
             "5. Output ONLY the post content."
         )
         
-        event_details = (
-            f"Event Name: {event_data.get('event title')}\n"
-            f"Speaker: {event_data.get('speaker')}\n"
-            f"Venue: {event_data.get('location')}\n"
-            f"Description: {event_data.get('event description')}\n"
-            f"Time: {event_data.get('time')}\n"
-            f"Link: {event_data.get('meetup link')}\n"
-        )
+        event_details = _build_event_details(normalized_data)
         
         for _ in range(3):
             response = client.chat.completions.create(
@@ -60,9 +103,20 @@ def rewrite_post(event_data: dict) -> str:
         # If it fails 3 times, truncate it safely
         print("Warning: AI failed to keep it under 280 characters. Truncating.")
         return rewritten[:277] + "..."
+    except APIStatusError as e:
+        if e.status_code == 403:
+            print(
+                "Error during AI rewriting: NVIDIA API authorization failed. "
+                "Check NVIDIA_API_KEY access, model permissions, and account status."
+            )
+        else:
+            print(f"Error during AI rewriting: API status {e.status_code} - {e}")
+        title = normalized_data.get("event title") or normalized_data.get("draft text") or "our next event"
+        return f"Join us for {title}!"
     except Exception as e:
         print(f"Error during AI rewriting: {e}")
-        return f"Join us for {event_data.get('event title')}!"
+        title = normalized_data.get("event title") or normalized_data.get("draft text") or "our next event"
+        return f"Join us for {title}!"
 
 def generate_qa_insights(posts: list) -> str:
     """

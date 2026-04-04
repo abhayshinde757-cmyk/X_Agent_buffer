@@ -62,7 +62,7 @@ The Excel Master Agent represents the most advanced workflow in the codebase, mo
 
 ### `config.py`
 This file acts as the secure vault for your environment.
-- **`EXCEL_FILE_PATH`**: Absolute path to the local cache (`posts.xlsx`).
+- **`EXCEL_FILE_PATH`**: Absolute path to the local runtime cache workbook.
 - **`REMOTE_EXCEL_URL`**: The direct download URL for your OneDrive source.
 - **`NVIDIA_API_KEY`**: Required for all Llama 3.1 features.
 - **`API_KEY` & `CHANNEL_ID`**: Your Buffer credentials for X integration.

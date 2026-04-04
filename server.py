@@ -8,8 +8,6 @@ from typing import Optional, List
 import pandas as pd
 import os
 import asyncio
-from contextlib import asynccontextmanager
-from datetime import datetime
 from config import EXCEL_FILE_PATH, REMOTE_EXCEL_URL
 
 from ai_rewriter import rewrite_post
@@ -18,6 +16,53 @@ from image_processor import pad_and_upload_image
 from buffer_client import create_post
 from link_generator import extract_post_link
 from scraper import run_scraper_api
+
+SYSTEM_EVENT_COLUMNS = {"ai_draft", "processed_image", "link", "posterlink", "status"}
+EXPECTED_EXCEL_COLUMNS = [
+    "status",
+    "event title",
+    "time",
+    "posterlink",
+    "event description",
+    "location",
+    "speaker",
+    "meetup link",
+    "ai_draft",
+    "processed_image",
+    "link",
+]
+
+
+def build_event_payload(row: pd.Series) -> dict:
+    """Return all non-empty row values except internal system columns."""
+    payload = {}
+    for column, value in row.items():
+        if str(column).strip().lower() in SYSTEM_EVENT_COLUMNS:
+            continue
+
+        text = str(value).strip()
+        if text.lower() in {"", "nan", "none"}:
+            continue
+
+        payload[str(column)] = text
+    return payload
+
+
+def ensure_excel_cache_dir() -> None:
+    os.makedirs(os.path.dirname(EXCEL_FILE_PATH), exist_ok=True)
+
+
+def write_excel_cache(df: pd.DataFrame) -> None:
+    ensure_excel_cache_dir()
+    root, ext = os.path.splitext(EXCEL_FILE_PATH)
+    tmp_path = f"{root}.tmp{ext or '.xlsx'}"
+    df.to_excel(tmp_path, index=False, engine="openpyxl")
+    os.replace(tmp_path, EXCEL_FILE_PATH)
+
+
+def read_excel_cache() -> pd.DataFrame:
+    return pd.read_excel(EXCEL_FILE_PATH, engine="openpyxl")
+
 
 async def perform_excel_sync():
     """Strict dynamic sync: Fetches Remote Excel, filters ONLY 'upcoming', processes them, and overwrites local cache."""
@@ -32,7 +77,7 @@ async def perform_excel_sync():
                 df = pd.read_excel(BytesIO(resp.content), engine='openpyxl')
                 
                 # Normalize columns safely
-                for col in ['status', 'event title', 'time', 'posterlink', 'event description', 'location', 'speaker', 'meetup link', 'ai_draft', 'processed_image', 'link']:
+                for col in EXPECTED_EXCEL_COLUMNS:
                     if col not in df.columns:
                         df[col] = ""
                     df[col] = df[col].astype(str).replace('nan', '').replace('None', '')
@@ -44,7 +89,7 @@ async def perform_excel_sync():
                 if upcoming_events.empty:
                     print(f"INFO: No upcoming events found. Data fetching skipped.")
                     # Still save an empty/clean set to local cache to clear old data
-                    await asyncio.to_thread(upcoming_events.to_excel, EXCEL_FILE_PATH, index=False, engine='openpyxl')
+                    await asyncio.to_thread(write_excel_cache, upcoming_events)
                     return True, ""
 
                 print(f"INFO: Processing {len(upcoming_events)} strictly upcoming events dynamically...")
@@ -52,14 +97,7 @@ async def perform_excel_sync():
                 for index, row in upcoming_events.iterrows():
                     try:
                         # 1. AI Drafting
-                        event_data = {
-                            "event title": str(row.get("event title", "")),
-                            "event description": str(row.get("event description", "")),
-                            "location": str(row.get("location", "")),
-                            "time": str(row.get("time", "")),
-                            "speaker": str(row.get("speaker", "")),
-                            "meetup link": str(row.get("meetup link", ""))
-                        }
+                        event_data = build_event_payload(row)
                         
                         draft = await asyncio.to_thread(rewrite_post, event_data)
                         
@@ -78,15 +116,22 @@ async def perform_excel_sync():
                         upcoming_events.at[index, 'link'] = "" 
                         upcoming_events.at[index, 'processed_image'] = processed_url
                         
-                        print(f"SUCCESS: Auto-processed dynamic draft: {event_data['event title']}")
+                        print(f"SUCCESS: Auto-processed dynamic draft: {event_data.get('event title', 'Untitled event')}")
                     except Exception as row_err:
                         print(f"ERROR: Processing row: {str(row_err)}")
 
                 # Save ONLY the processed "upcoming" rows to local Excel as our active queue
-                await asyncio.to_thread(upcoming_events.to_excel, EXCEL_FILE_PATH, index=False, engine='openpyxl')
+                await asyncio.to_thread(write_excel_cache, upcoming_events)
                 return True, ""
             else:
                 return False, f"Remote download failed: {resp.status_code}"
+        except PermissionError:
+            msg = (
+                f"Excel cache is locked: {EXCEL_FILE_PATH}. "
+                "Close any app using the cache file and try again."
+            )
+            print(f"ERROR: {msg}")
+            return False, msg
         except Exception as e:
             msg = f"Excel Sync Error: {str(e)}"
             print(f"ERROR: {msg}")
@@ -188,10 +233,10 @@ async def api_excel_sync():
         return {"success": False, "error": "Excel file not found after sync."}
 
     try:
-        df = pd.read_excel(EXCEL_FILE_PATH, engine='openpyxl')
+        df = read_excel_cache()
         
         # Consistent dtype safety
-        for col in ['status', 'event title', 'event description', 'location', 'time', 'speaker', 'meetup link', 'processed_image', 'link', 'ai_draft']:
+        for col in EXPECTED_EXCEL_COLUMNS:
             if col in df.columns:
                 df[col] = df[col].astype(str).replace('nan', '').replace('None', '')
         
@@ -230,10 +275,10 @@ async def api_excel_confirm(req: ExcelConfirmRequest):
         twitter_link = await asyncio.to_thread(extract_post_link, response)
         print(f"INFO: Extracted link: {twitter_link}")
 
-        df = pd.read_excel(EXCEL_FILE_PATH, engine='openpyxl')
+        df = read_excel_cache()
         df.at[req.index, 'status'] = 'Posted'
         df.at[req.index, 'link'] = str(twitter_link)
-        await asyncio.to_thread(df.to_excel, EXCEL_FILE_PATH, index=False, engine='openpyxl')
+        await asyncio.to_thread(write_excel_cache, df)
         print(f"SUCCESS: Local Excel updated for index {req.index}")
 
         return {"success": True, "link": str(twitter_link)}
